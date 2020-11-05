@@ -185,6 +185,7 @@ exports.connect = async (req, res) => {
             if(err.name == 'TokenExpiredError') {
                 console.log('Token Expired Error')
                 res.send({
+                    connect: true,
                     logout: true
                 })
                 return
