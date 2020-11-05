@@ -12,10 +12,10 @@ const PORT = process.env.PORT || 3000
 
 const app = express()
 
-app.use(express.static(__dirname + '/public'));
+// server.use(express.static(__dirname + '/public'))
 
 app.use(morgan('combined'))
-app.use(bodyParser.urlencoded({ extended: false }));
+app.use(bodyParser.urlencoded({ extended: false }))
 app.use(bodyParser.json())
 app.use(cors())
 app.use(appRoutes)

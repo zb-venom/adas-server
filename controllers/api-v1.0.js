@@ -178,7 +178,12 @@ exports.newPassword = async (req, res) => {
 
 exports.connect = async (req, res) => {
     let token = req.headers['x-access-token'];
-    if (!token) res.send({error: 'No access token'})
+    if (!token) res.send({error: 'No access token', connect: true})
+    else {            
+        res.send({
+            connect: true
+        })
+    }
 
     jwt.verify(token, config.secret, async function(err, decoded) {
         if (err) {
