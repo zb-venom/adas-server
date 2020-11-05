@@ -9,8 +9,8 @@ const config = require('../config/secret');
 
 moment.locale('ru')
 
-const accountingSchema = require('../models/devices')
-const devicesSchema = require('../models/accounting')
+const devicesSchema = require('../models/devices')
+const accountingSchema = require('../models/accounting')
 const usersSchema = require('../models/users')
 const logsSchema = require('../models/logs')
 
@@ -177,8 +177,26 @@ exports.newPassword = async (req, res) => {
 }
 
 exports.connect = async (req, res) => {
-    res.send({
-        connect: true
+    let token = req.headers['x-access-token'];
+    if (!token) res.send({error: 'No access token'})
+
+    jwt.verify(token, config.secret, async function(err, decoded) {
+        if (err) {
+            if(err.name == 'TokenExpiredError') {
+                console.log('Token Expired Error')
+                res.send({
+                    logout: true
+                })
+                return
+            } else {
+                console.log(err.name)
+            }    
+        } else {              
+            res.send({
+                connect: true
+            })
+        }
+
     })
 }
 
@@ -262,6 +280,98 @@ exports.users = async (req, res) => {
             }
             res.send({
                 users
+            })
+        }
+
+    })
+}
+
+exports.devices = async (req, res) => {
+    let token = req.headers['x-access-token'];
+    if (!token) res.send({error: 'No access token'})
+
+    jwt.verify(token, config.secret, async function(err, decoded) {
+        if (err) {
+            if(err.name == 'TokenExpiredError') {
+                console.log('Token Expired Error')
+                res.send({
+                    logout: true
+                })
+                return
+            } else {
+                console.log(err.name)
+            }    
+        } else {             
+            let devices = await devicesSchema.find({}).lean()
+            res.send({
+                devices
+            })
+        }
+
+    })
+}
+
+exports.deviceEdit = async (req, res) => {
+    let token = req.headers['x-access-token'];
+    if (!token) res.send({error: 'No access token'})
+
+    jwt.verify(token, config.secret, async function(err, decoded) {
+        if (err) {
+            if(err.name == 'TokenExpiredError') {
+                console.log('Token Expired Error')
+                res.send({
+                    logout: true
+                })
+                return
+            } else {
+                console.log(err.name)
+            }    
+        } else {    
+            console.log(req.body)         
+            let device = await devicesSchema.findById(req.body._id).lean()
+            if (device) {
+                await devicesSchema.findByIdAndUpdate(req.body._id, {
+                    name: req.body.name,
+                    about: req.body.about,
+                    imgSrc: req.body.imgSrc,
+                    type: req.body.type
+                })
+            } else {
+                let new_device = new devicesSchema({
+                    name: req.body.name,
+                    about: req.body.about,
+                    imgSrc: req.body.imgSrc,
+                    type: req.body.type
+                })
+                await new_device.save()
+            }
+            res.send({
+                status: 200
+            })
+        }
+
+    })
+}
+
+exports.deviceDelete = async (req, res) => {
+    let token = req.headers['x-access-token'];
+    if (!token) res.send({error: 'No access token'})
+
+    jwt.verify(token, config.secret, async function(err, decoded) {
+        if (err) {
+            if(err.name == 'TokenExpiredError') {
+                console.log('Token Expired Error')
+                res.send({
+                    logout: true
+                })
+                return
+            } else {
+                console.log(err.name)
+            }    
+        } else {  
+            await devicesSchema.findByIdAndDelete(req.body._id)
+            res.send({
+                status: 200
             })
         }
 

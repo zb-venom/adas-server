@@ -13,9 +13,12 @@ router.route(url+'/new-password').post(api.newPassword)
 
 // For all users
 router.route(url+'/logs').post(api.logs)
+router.route(url+'/devices').post(api.devices)
 
 // For Admins
 router.route(url+'/admin/users').post(api.users)
+router.route(url+'/admin/devices/edit').post(api.deviceEdit)
+router.route(url+'/admin/devices/delete').post(api.deviceDelete)
 
 // Connect to server
 router.route(url+'/connect').post(api.connect)
