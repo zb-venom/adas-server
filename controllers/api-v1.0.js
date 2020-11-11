@@ -57,6 +57,7 @@ exports.signIn = async (req, res) => {
                         _id: user._id,
                         login: user.login,
                         isAdmin: user.type == 1,
+                        isBlock: user.type == 0,
                         about: user.about,
                         eMail: user.email,
                         phone: user.phone,
@@ -79,26 +80,35 @@ exports.signIn = async (req, res) => {
 
 exports.signUp = async (req, res) => {
     let response = {}
-    if (!req.body.about || !req.body.login || !req.body.email || !req.body.phone || !req.body.password) {
+    if (!req.body.about || !req.body.login || !req.body.eMail || !req.body.phone || !req.body.password) {
         response = {
-            error: 'ОШИБКА! Необходимо заполнить все поля.'
+            errorType: 'login',
+            error: 'Необходимо заполнить все поля.'
         }
     } else {
-        const user = await usersSchema.findOne({login: req.body.login.toLocaleLowerCase()})
-        if (user) {
+        const userL = await usersSchema.findOne({login: req.body.login.toLocaleLowerCase()})
+        const userE = await usersSchema.findOne({email: req.body.eMail})
+        if (userL) {
             response = {
-                error: 'ОШИБКА! Данный пользователь уже зарегистрирован.'
+                errorType: 'login',
+                error: 'Логин занят.'
+            }
+        } else if (userE) {
+            response = {
+                errorType: 'eMail',
+                error: 'Почта уже используется.'
             }
         } else if (req.body.password == '1234567890') {
             response = {
-                error: 'ОШИБКА! Пароль не должен совпадать со стандартным.'
+                errorType: 'password',
+                error: 'Пароль не должен совпадать со стандартным.'
             }
         } else {
             const salt = hsh.getSalt('', 8);
             const new_user = new usersSchema({
                 about: req.body.about,
                 login: req.body.login.toLocaleLowerCase(),
-                email:  req.body.email,
+                email:  req.body.eMail,
                 phone:  req.body.phone,
                 password:  hsh.getHash(req.body.password, salt),
                 salt: salt,
@@ -108,12 +118,10 @@ exports.signUp = async (req, res) => {
             })
             await new_user.save();
             response = {
-                status: 200, 
-                text: 'OK'
+                status: 200
             }
         }
     }
-    console.log(response)
     res.send({
         response    
     })
@@ -179,11 +187,6 @@ exports.newPassword = async (req, res) => {
 exports.connect = async (req, res) => {
     let token = req.headers['x-access-token'];
     if (!token) res.send({error: 'No access token', connect: true})
-    else {            
-        res.send({
-            connect: true
-        })
-    }
 
     jwt.verify(token, config.secret, async function(err, decoded) {
         if (err) {
@@ -195,7 +198,10 @@ exports.connect = async (req, res) => {
                 })
                 return
             } else {
-                console.log(err.name)
+                console.log(err.name)             
+                res.send({
+                    connect: true
+                })
             }    
         } else {              
             res.send({
@@ -292,6 +298,31 @@ exports.users = async (req, res) => {
     })
 }
 
+exports.userDelete = async (req, res) => {
+    let token = req.headers['x-access-token'];
+    if (!token) res.send({error: 'No access token'})
+
+    jwt.verify(token, config.secret, async function(err, decoded) {
+        if (err) {
+            if(err.name == 'TokenExpiredError') {
+                console.log('Token Expired Error')
+                res.send({
+                    logout: true
+                })
+                return
+            } else {
+                console.log(err.name)
+            }    
+        } else {  
+            await usersSchema.findByIdAndDelete(req.body._id)
+            res.send({
+                status: 200
+            })
+        }
+
+    })
+}
+
 exports.devices = async (req, res) => {
     let token = req.headers['x-access-token'];
     if (!token) res.send({error: 'No access token'})
@@ -309,6 +340,46 @@ exports.devices = async (req, res) => {
             }    
         } else {             
             let devices = await devicesSchema.find({}).lean()
+            res.send({
+                devices
+            })
+        }
+
+    })
+}
+
+exports.devicesSearch = async (req, res) => {
+    let token = req.headers['x-access-token'];
+    if (!token) res.send({error: 'No access token'})
+
+    jwt.verify(token, config.secret, async function(err, decoded) {
+        if (err) {
+            if(err.name == 'TokenExpiredError') {
+                console.log('Token Expired Error')
+                res.send({
+                    logout: true
+                })
+                return
+            } else {
+                console.log(err.name)
+            }    
+        } else {   
+            let devices = []
+            if (req.body.search)          
+                devices = await devicesSchema.find({ 
+                    $or: [ 
+                        { name: { $regex: req.params.search, $options: '-i'  } },
+                        { about: { $regex: req.params.search, $options: '-i'  } },
+                        { type: { $regex: req.params.search, $options: '-i'  } }
+                    ] 
+                }).lean()
+            else devices = await devicesSchema.find({}).lean()
+            for (let i = 0; i < devices.length; i++) {
+                let acc404 = await accountingSchema.find({device_id: devices[i]._id, place: '404'})
+                devices[i].accounting404 = acc404.length
+                let acc707 = await accountingSchema.find({device_id: devices[i]._id, place: '707'})
+                devices[i].accounting707 = acc707.length
+            }
             res.send({
                 devices
             })
@@ -376,6 +447,119 @@ exports.deviceDelete = async (req, res) => {
             }    
         } else {  
             await devicesSchema.findByIdAndDelete(req.body._id)
+            res.send({
+                status: 200
+            })
+        }
+
+    })
+}
+
+exports.accounting = async (req, res) => {
+    let token = req.headers['x-access-token'];
+    if (!token) res.send({error: 'No access token'})
+
+    jwt.verify(token, config.secret, async function(err, decoded) {
+        if (err) {
+            if(err.name == 'TokenExpiredError') {
+                console.log('Token Expired Error')
+                res.send({
+                    logout: true
+                })
+                return
+            } else {
+                console.log(err.name)
+            }    
+        } else {             
+            let devices = await devicesSchema.find({}).lean()
+            for (let i = 0; i < devices.length; i++) {
+                let acc = await accountingSchema.find({device_id: devices[i]._id})
+                devices[i].accounting = acc
+            }
+            res.send({
+                devices
+            })
+        }
+
+    })
+}
+
+exports.accountingAdd = async (req, res) => {
+    let token = req.headers['x-access-token'];
+    if (!token) res.send({error: 'No access token'})
+
+    jwt.verify(token, config.secret, async function(err, decoded) {
+        if (err) {
+            if(err.name == 'TokenExpiredError') {
+                console.log('Token Expired Error')
+                res.send({
+                    logout: true
+                })
+                return
+            } else {
+                console.log(err.name)
+            }    
+        } else {             
+            let new_accounting = new accountingSchema({
+                device_id: req.body.device_id,
+                code: req.body.code,
+                place: req.body.place,
+                note: req.body.note
+            })
+            await new_accounting.save()
+            res.send({
+                status: 200
+            })
+        }
+
+    })
+}
+
+exports.accountingEdit = async (req, res) => {
+    let token = req.headers['x-access-token'];
+    if (!token) res.send({error: 'No access token'})
+
+    jwt.verify(token, config.secret, async function(err, decoded) {
+        if (err) {
+            if(err.name == 'TokenExpiredError') {
+                console.log('Token Expired Error')
+                res.send({
+                    logout: true
+                })
+                return
+            } else {
+                console.log(err.name)
+            }    
+        } else {             
+            await accountingSchema.findByIdAndUpdate(req.body._id, {
+                note: req.body.note, 
+                place: req.body.place
+            })
+            res.send({
+                status: 200
+            })
+        }
+
+    })
+}
+
+exports.accountingDelete = async (req, res) => {
+    let token = req.headers['x-access-token'];
+    if (!token) res.send({error: 'No access token'})
+
+    jwt.verify(token, config.secret, async function(err, decoded) {
+        if (err) {
+            if(err.name == 'TokenExpiredError') {
+                console.log('Token Expired Error')
+                res.send({
+                    logout: true
+                })
+                return
+            } else {
+                console.log(err.name)
+            }    
+        } else {             
+            await accountingSchema.findByIdAndDelete(req.body._id)
             res.send({
                 status: 200
             })

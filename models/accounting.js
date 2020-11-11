@@ -7,11 +7,8 @@ const accountingSchema = new Schema({
     },
     device_id:  String,
     code: String,
-    auditory: String,
-    created: { 
-        type: Date,
-        default: Date.now
-    }
+    place: String,
+    note: String
 })
 
 module.exports = model('accounting', accountingSchema)
