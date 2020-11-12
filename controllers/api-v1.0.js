@@ -62,7 +62,8 @@ exports.signIn = async (req, res) => {
                         eMail: user.email,
                         phone: user.phone,
                         code: user.code,
-                        type: type
+                        type: type,
+                        imgSrc: user.imgSrc
                     }
                 })
             } else {
@@ -278,7 +279,9 @@ exports.users = async (req, res) => {
                     about: usersFull[i].about,
                     eMail: usersFull[i].email,
                     phone: usersFull[i].phone,
-                    code: usersFull[i].code
+                    code: usersFull[i].code,
+                    imgSrc: usersFull[i].imgSrc,
+                    typeNum: usersFull[i].type
                 }
                 if (usersFull[i].type == 1)
                     users[i].type = 'Администратор'

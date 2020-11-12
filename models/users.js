@@ -7,6 +7,10 @@ const userSchema = new Schema({
     email: String,
     phone: String,
     about: String,
+    imgSrc: {
+        type: String,
+        default: 'https://res.cloudinary.com/adas/image/upload/v1605162780/devices/dqr6pvy9guow0dwg9s8y.jpg'
+    },
     new_password: Boolean,
     new_password_hash: String,
     vk_uid: {
