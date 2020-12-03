@@ -9,7 +9,7 @@ const url = '/api/v1.0'
 // Auth
 router.route(url+'/signin').post(api.signIn)
 router.route(url+'/signup').post(api.signUp)
-router.route(url+'/new-password').post(api.newPassword)
+router.route(url+'/new/password').post(api.userNewPassword)
 
 // For all users
 router.route(url+'/logs').post(api.logs)
@@ -17,7 +17,9 @@ router.route(url+'/devices/search').post(api.devicesSearch)
 
 // For Admins
 router.route(url+'/admin/users').post(api.users)
+router.route(url+'/admin/users/edit').post(api.userEdit)
 router.route(url+'/admin/users/delete').post(api.userDelete)
+router.route(url+'/admin/users/reset/password').post(api.userResetPassword)
 router.route(url+'/devices').post(api.devices)
 router.route(url+'/admin/devices/edit').post(api.deviceEdit)
 router.route(url+'/admin/devices/delete').post(api.deviceDelete)

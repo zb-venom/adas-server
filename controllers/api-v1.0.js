@@ -29,16 +29,15 @@ exports.signIn = async (req, res) => {
         if (!user) {
             response = {
                 errorType: 'login',
-                error: 'Логин не существует или введён неверно.'
+                error: 'Логин не существует или введён неверно.',
             }
         } else {
             if (hsh.getHash(req.body.password, user.salt) == user.password){    
                 if (user.new_password) {   
-                    var hash = md5(md5(user.login) + md5(Date.now.toString())); 
-                    await usersSchema.findByIdAndUpdate(user._id, { 'new_password_hash': hash })
+                    let token = jwt.sign({ _id: user._id }, config.secret, { expiresIn: 86000 });
                     response = {
-                        redirect: '/new-password',
-                        newPasswordHash: hash
+                        new_password_hash: user.new_password_hash,
+                        token: token
                     }
                 } 
                 let token = jwt.sign({ _id: user._id }, config.secret, { expiresIn: 86000 });
@@ -128,67 +127,9 @@ exports.signUp = async (req, res) => {
     })
 }
 
-exports.newPassword = async (req, res) => {
-    let response = {}
-    if (!req.body.newPasswordHash || !req.body._id) {
-        response = {
-            redirect: '/signin'
-        }
-    } else {
-        try {
-            const user = await usersSchema.findById(req.body._id)
-            if (user) {
-                if (!req.body.password || !req.body.password2) { 
-                    response = {
-                        error: 'ОШИБКА! Заполните все поля!'
-                    }            
-                } else if (user.new_password_hash != req.body.newPasswordHash) { 
-                    response = {
-                        error: 'ОШИБКА! Хеш не подходит!',
-                        redirect: '/signin'
-                    }            
-                } else if (req.body.password != req.body.password2) { 
-                    response = {
-                        error: 'ОШИБКА! Пароли не совпадают!'
-                    }
-                } else if (user.password == hsh.getHash(req.body.password, user.salt)) { 
-                    response = {
-                        error: 'ОШИБКА! Новый пароль не должен совпадать со стандартным или предыдущим!'
-                    }
-                } else {   
-                    const salt = hsh.getSalt('', 8);
-                    await usersSchema.findByIdAndUpdate(req.body._id, {'password': hsh.getHash(req.body.password, salt), 'salt': salt, 'new_password': false, 'new_password_hash': ''})
-                    console.log('Пользователь (_id: '+req.body._id+') удачно сменил пароль.');
-                    let token = jwt.sign({ id: user._id }, config.secret, { expiresIn: 86400 });
-                    console.log('Пользователь (_id: '+user._id+') вошёл в систему. token: ' + token) 
-                    response = Object.assign(response, {
-                        auth: true,
-                        token: token,
-                        user: {
-                            _id: user._id,
-                            login: user.login,
-                            isAdmin: user.type == 1
-                        }
-                    })
-                }
-            }   
-        } catch (e) {
-            console.log(e)
-            response = {
-                error: 'Ошибка Авторизации',
-                redirect: '/signin'
-            }
-        }        
-    }
-    res.send({
-        response
-    })
-}
-
 exports.connect = async (req, res) => {
     let token = req.headers['x-access-token'];
     if (!token) res.send({error: 'No access token', connect: true})
-
     jwt.verify(token, config.secret, async function(err, decoded) {
         if (err) {
             if(err.name == 'TokenExpiredError') {
@@ -268,7 +209,17 @@ exports.users = async (req, res) => {
                 console.log(err.name)
             }    
         } else {             
-            let usersFull = await usersSchema.find({}).lean()
+            if (req.body.search)  {
+                console.log(1)
+                var usersFull = await usersSchema.find({ 
+                    $or: [ 
+                        { about: { $regex: req.body.search, $options: '-i' } }, 
+                        { login: { $regex: req.body.search, $options: '-i'  } },
+                        { email: { $regex: req.body.search, $options: '-i'  } },
+                        { phone: { $regex: req.body.search, $options: '-i'  } }
+                    ] 
+                }).lean()  
+            } else var usersFull = await usersSchema.find({}).lean()
             let users = []
             var date = new Date()
             var new_code = '7'+(date.getSeconds()+10)+''+date.getTime()
@@ -280,6 +231,7 @@ exports.users = async (req, res) => {
                     eMail: usersFull[i].email,
                     phone: usersFull[i].phone,
                     code: usersFull[i].code,
+                    new_password: usersFull[i].new_password,
                     imgSrc: usersFull[i].imgSrc,
                     typeNum: usersFull[i].type
                 }
@@ -295,6 +247,78 @@ exports.users = async (req, res) => {
             }
             res.send({
                 users
+            })
+        }
+
+    })
+}
+
+exports.userEdit = async (req, res) => {
+    let token = req.headers['x-access-token'];
+    if (!token) res.send({error: 'No access token'})
+
+    jwt.verify(token, config.secret, async function(err, decoded) {
+        if (err) {
+            if(err.name == 'TokenExpiredError') {
+                console.log('Token Expired Error')
+                res.send({
+                    logout: true
+                })
+                return
+            } else {
+                console.log(err.name)
+            }    
+        } else {            
+            let Luser = await usersSchema.findById(req.body.user._id).lean()
+            let new_user = {}
+            let date = new Date()
+            let new_code = '7'+(date.getSeconds()+10)+''+date.getTime()
+            if (Luser) {
+                await usersSchema.findByIdAndUpdate(req.body.user._id, {
+                    about: req.body.user.about,
+                    login: req.body.user.login.toLocaleLowerCase(),
+                    email: req.body.user.eMail,
+                    phone: req.body.user.phone,
+                    type: req.body.user.typeNum,
+                    imgSrc: req.body.user.imgSrc
+                })
+            } else {
+                const salt = hsh.getSalt('', 8);
+                new_user = new usersSchema({
+                    about: req.body.user.about,
+                    login: req.body.user.login.toLocaleLowerCase(),
+                    email: req.body.user.eMail,
+                    phone: req.body.user.phone,
+                    imgSrc: req.body.user.imgSrc,
+                    password: hsh.getHash('1234567890', salt),
+                    code: new_code,
+                    salt: salt,
+                    vk_uid: '',
+                    ya_uid: '',
+                    google_uid: ''
+                })
+                await user.save();
+            }
+            let user = await usersSchema.findById(req.body.user._id).lean()
+            users = {
+                _id: user._id,
+                login: user.login,
+                about: user.about,
+                eMail: user.email,
+                phone: user.phone,
+                code: user.code,
+                new_password: user.new_password,
+                imgSrc: user.imgSrc,
+                typeNum: user.type
+            }
+            if (user.type == 1)
+                users.type = 'Администратор'
+            else if (user.type == 0)
+                users.type = 'Не подтвержден'
+            else if (user.type == 2)
+                users.type = 'Студент'
+            res.send({
+                user: users
             })
         }
 
@@ -320,6 +344,109 @@ exports.userDelete = async (req, res) => {
             await usersSchema.findByIdAndDelete(req.body._id)
             res.send({
                 status: 200
+            })
+        }
+
+    })
+}
+
+exports.userResetPassword = async (req, res) => {
+    let token = req.headers['x-access-token'];
+    if (!token) res.send({error: 'No access token'})
+
+    jwt.verify(token, config.secret, async function(err, decoded) {
+        if (err) {
+            if(err.name == 'TokenExpiredError') {
+                console.log('Token Expired Error')
+                res.send({
+                    logout: true
+                })
+                return
+            } else {
+                console.log(err.name)
+            }    
+        } else {  
+            const salt = hsh.getSalt('', 8);
+            let new_user = await usersSchema.findByIdAndUpdate(req.body._id, {
+                new_password: true,
+                new_password_hash: hsh.getSalt('', 32),
+                password:  hsh.getHash('1234567890', salt),
+                salt: salt,
+            })
+            users = {
+                _id: req.body._id,
+                login: new_user.login,
+                about: new_user.about,
+                eMail: new_user.email,
+                phone: new_user.phone,
+                code: new_user.code,
+                new_password: true,
+                imgSrc: new_user.imgSrc,
+                typeNum: new_user.type
+            }
+            if (new_user.type == 1)
+                users.type = 'Администратор'
+            else if (new_user.type == 0)
+                users.type = 'Не подтвержден'
+            else if (new_user.type == 2)
+                users.type = 'Студент'
+            res.send({
+                user: users
+            })
+        }
+
+    })
+}
+
+exports.userNewPassword = async (req, res) => {
+    let token = req.body.token;
+    let response = {}
+    if (!token) res.send({error: 'No access token'})
+
+    jwt.verify(token, config.secret, async function(err, decoded) {
+        if (err) {
+            if(err.name == 'TokenExpiredError') {
+                console.log('Token Expired Error')
+                res.send({
+                    logout: true
+                })
+                return
+            } else {
+                console.log(err.name)
+            }    
+        } else {  
+            const user = await usersSchema.findById(req.body._id)       
+            if (user.new_password_hash != req.body.hash) { 
+                res.send({
+                    logout: true
+                })
+                return
+            } else
+            if (!req.body.password || !req.body.password2) { 
+                response = {
+                    errorType: 'password',
+                    error: 'Заполните все поля!'
+                }            
+            } else if (user.password == hsh.getHash(req.body.password, user.salt)) {                 
+                response = {
+                    errorType: 'password',
+                    error: 'Новый пароль не должен совпадать со стандартным.'
+                }
+            } else if (req.body.password == req.body.password2) {   
+                const salt = hsh.getSalt('', 8);
+                await usersSchema.findByIdAndUpdate(req.body._id, {'password': hsh.getHash(req.body.password, salt), 'salt': salt, 'new_password': false, 'new_password_hash': ''})
+                console.log('Пользователь (_id: '+req.body._id+') удачно сменил пароль.');
+                response = {
+                    auth: true
+                }
+            } else {      
+                response = {
+                    errorType: 'password',
+                    error: 'Пароли не совпадают.'
+                }
+            }
+            res.send({
+                response
             })
         }
 
@@ -371,17 +498,15 @@ exports.devicesSearch = async (req, res) => {
             if (req.body.search)          
                 devices = await devicesSchema.find({ 
                     $or: [ 
-                        { name: { $regex: req.params.search, $options: '-i'  } },
-                        { about: { $regex: req.params.search, $options: '-i'  } },
-                        { type: { $regex: req.params.search, $options: '-i'  } }
+                        { name: { $regex: req.body.search, $options: '-i'  } },
+                        { about: { $regex: req.body.search, $options: '-i'  } },
+                        { type: { $regex: req.body.search, $options: '-i'  } }
                     ] 
                 }).lean()
             else devices = await devicesSchema.find({}).lean()
             for (let i = 0; i < devices.length; i++) {
-                let acc404 = await accountingSchema.find({device_id: devices[i]._id, place: '404'})
-                devices[i].accounting404 = acc404.length
-                let acc707 = await accountingSchema.find({device_id: devices[i]._id, place: '707'})
-                devices[i].accounting707 = acc707.length
+                devices[i].accounting404 = await accountingSchema.find({device_id: devices[i]._id, place: '404', taken: 0}).countDocuments()
+                devices[i].accounting707 = await accountingSchema.find({device_id: devices[i]._id, place: '707', taken: 0}).countDocuments()
             }
             res.send({
                 devices
