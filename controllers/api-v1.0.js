@@ -599,7 +599,15 @@ exports.accounting = async (req, res) => {
                 console.log(err.name)
             }    
         } else {             
-            let devices = await devicesSchema.find({}).lean()
+            if (req.body.search)          
+                devices = await devicesSchema.find({ 
+                    $or: [ 
+                        { name: { $regex: req.body.search, $options: '-i'  } },
+                        { about: { $regex: req.body.search, $options: '-i'  } },
+                        { type: { $regex: req.body.search, $options: '-i'  } }
+                    ] 
+                }).lean()
+            else devices = await devicesSchema.find({}).lean()
             for (let i = 0; i < devices.length; i++) {
                 let acc = await accountingSchema.find({device_id: devices[i]._id})
                 devices[i].accounting = acc
