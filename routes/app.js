@@ -14,6 +14,7 @@ router.route(url+'/new/password').post(api.userNewPassword)
 // For all users
 router.route(url+'/logs').post(api.logs)
 router.route(url+'/devices/search').post(api.devicesSearch)
+router.route(url+'/user/onhands').post(api.onHands)
 
 // For Admins
 router.route(url+'/admin/users').post(api.users)

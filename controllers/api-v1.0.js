@@ -253,6 +253,37 @@ exports.users = async (req, res) => {
     })
 }
 
+exports.onHands = async (req, res) => {
+    let token = req.headers['x-access-token'];
+    if (!token) res.send({error: 'No access token'})
+
+    jwt.verify(token, config.secret, async function(err, decoded) {
+        if (err) {
+            if(err.name == 'TokenExpiredError') {
+                console.log('Token Expired Error')
+                res.send({
+                    logout: true
+                })
+                return
+            } else {
+                console.log(err.name)
+            }    
+        } else {             
+            let acc = await accountingSchema.find({taken: req.body._id})
+            const have = []
+            for (let i = 0; i < acc.length; i++) {
+                var device = await devicesSchema.findOne({_id: acc[i].device_id}).lean()
+                have[i] = Object.assign({name: device.name}, acc[i])
+            }
+            res.send({
+                have
+            })
+        }
+
+    })
+}
+
+
 exports.userEdit = async (req, res) => {
     let token = req.headers['x-access-token'];
     if (!token) res.send({error: 'No access token'})
